@@ -6,7 +6,7 @@
 
 - MPRIS 自动读取歌曲 ID、播放状态和进度，无需读取 go-musicfox 内部文件；
 - 网易云 `YRC` 逐字时间轴，传统 `LRC` 自动回退；
-- 翻译/罗马音 + 原文两行显示；
+- 原文、翻译、罗马音可独立输出，由 Waybar 组合成双行显示；
 - 左键在“翻译 / 罗马音”间即时切换；
 - 播放中的词加粗、下划线，未播放部分半透明；
 - 暂停后停止推进，切歌自动重新获取歌词。
@@ -69,15 +69,27 @@ inputs.lyricsync.url = "github:oukaromf/lyricsync";
 使用 Home Manager 管理 Waybar 时，可以直接引用 Nix store 中的可执行文件：
 
 ```nix
-programs.waybar.settings.mainBar."custom/lyrics" = {
-  exec = "${pkgs.lyricsync}/bin/lyricsync";
-  on-click = "${pkgs.lyricsync}/bin/lyricsync toggle";
-  return-type = "json";
-  restart-interval = 2;
-  exec-on-event = false;
-  escape = false;
-  tooltip = true;
-  max-length = 80;
+programs.waybar.settings.mainBar = {
+  "group/lyrics" = {
+    orientation = "vertical";
+    modules = [ "custom/lyrics-secondary" "custom/lyrics-original" ];
+  };
+  "custom/lyrics-secondary" = {
+    exec = "${pkgs.lyricsync}/bin/lyricsync -output secondary";
+    on-click = "${pkgs.lyricsync}/bin/lyricsync toggle";
+    return-type = "json";
+    restart-interval = 2;
+    exec-on-event = false;
+    escape = false;
+  };
+  "custom/lyrics-original" = {
+    exec = "${pkgs.lyricsync}/bin/lyricsync -output original";
+    on-click = "${pkgs.lyricsync}/bin/lyricsync toggle";
+    return-type = "json";
+    restart-interval = 2;
+    exec-on-event = false;
+    escape = false;
+  };
 };
 ```
 
@@ -87,14 +99,14 @@ programs.waybar.settings.mainBar."custom/lyrics" = {
 ## Waybar 配置
 
 把 [waybar-module.jsonc](./examples/waybar-module.jsonc) 中的模块加入 Waybar
-配置，并将 `custom/lyrics` 放入 `modules-left`、`modules-center` 或
+配置，并将 `group/lyrics` 放入 `modules-left`、`modules-center` 或
 `modules-right`。然后把 [style.css](./examples/style.css) 追加到 Waybar 样式表。
 
 示例模块的 `exec` 是一个持续运行的进程，每 80ms 输出一条 Waybar JSON；不要再
 设置 `interval`。`restart-interval` 只用于进程意外退出后重启。歌词包含 Pango 标记，
 所以需要保留 `escape: false`。`exec-on-event: false` 可避免点击时由 Waybar 重启这个
-持续进程；程序会自行在下一帧读到切换后的模式。如果两行被裁切，请适当增加 Waybar
-的 `height`。
+持续进程；程序会自行在下一帧读到切换后的模式。上下两行分别由独立模块输出，换行与
+排版交给 Waybar 的垂直 group 处理，不需要增加整条栏的 `height`。
 
 修改配置后重启 Waybar：
 
@@ -111,6 +123,10 @@ lyricsync -offset -200ms           把歌词提前 200ms
 lyricsync toggle                  切换翻译 / 罗马音
 lyricsync mode translation        固定为翻译
 lyricsync mode romanization       固定为罗马音
+lyricsync -output original        只输出原文（保留逐字高亮）
+lyricsync -output translation     只输出翻译
+lyricsync -output romanization    只输出罗马音
+lyricsync -output secondary       按当前模式输出翻译或罗马音
 lyricsync -id 524152942 -position 1m5s  调试指定歌曲和位置
 lyricsync -once                   只输出一条 JSON
 lyricsync -hide-when-inactive     未检测到 musicfox 时输出空文本，便于 Waybar 回退
@@ -122,14 +138,16 @@ lyricsync -hide-when-inactive     未检测到 musicfox 时输出空文本，便
 
 ## 输出格式
 
-程序逐行输出 Waybar 的 `return-type: json` 格式：
+程序逐行输出 Waybar 的 `return-type: json` 格式。默认的 `combined` 模式为兼容旧配置
+保留内嵌换行；推荐为 Waybar 的两个垂直子模块分别使用 `secondary` 与 `original`：
 
 ```json
 {"text":"<span size=\"small\" alpha=\"75%\">翻译</span>\n已播放<b><u>当前词</u></b><span alpha=\"55%\">未播放</span>","tooltip":"歌名\n歌手\n显示：翻译 · 左键切换","class":"playing","percentage":42}
 ```
 
-如果某首歌没有当前模式对应的副歌词，会自动回退到另一种副歌词；两者都没有时只显示
-原文。网易云接口可能因网络、地区或版权策略无法返回个别歌曲歌词。
+`secondary` 在当前模式对应的副歌词缺失时会自动回退到另一种副歌词；明确选择
+`translation` 或 `romanization` 时不会回退，缺失内容将输出为空。网易云接口可能因
+网络、地区或版权策略无法返回个别歌曲歌词。
 
 ## 致谢与许可
 

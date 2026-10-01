@@ -60,6 +60,7 @@ func run(args []string) error {
 	offset := fs.Duration("offset", 0, "歌词时间偏移，例如 -200ms")
 	once := fs.Bool("once", false, "只输出一次 JSON")
 	hideWhenInactive := fs.Bool("hide-when-inactive", false, "未检测到目标播放器时输出空文本")
+	outputName := fs.String("output", "combined", "输出内容：combined、original、translation、romanization、secondary")
 	id := fs.Int64("id", 0, "直接指定网易云歌曲 ID（调试用）")
 	position := fs.Duration("position", 0, "配合 -id 指定播放位置（调试用）")
 	if err := fs.Parse(args); err != nil {
@@ -67,6 +68,10 @@ func run(args []string) error {
 	}
 	if *interval < 20*time.Millisecond {
 		return errors.New("-interval 不能小于 20ms")
+	}
+	outputPart, err := app.ParseOutputPart(*outputName)
+	if err != nil {
+		return err
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -79,7 +84,7 @@ func run(args []string) error {
 		if err := engine.Update(ctx, track); err != nil {
 			return err
 		}
-		return writeOutput(engine.Output(track, state.ReadMode()))
+		return writeOutput(engine.Output(track, state.ReadMode(), outputPart))
 	}
 
 	source, err := mpris.New(*player, *poll)
@@ -88,10 +93,10 @@ func run(args []string) error {
 	}
 	defer source.Close()
 
-	return stream(ctx, source, engine, *interval, *once, *hideWhenInactive)
+	return stream(ctx, source, engine, outputPart, *interval, *once, *hideWhenInactive)
 }
 
-func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, interval time.Duration, once, hideWhenInactive bool) error {
+func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, outputPart app.OutputPart, interval time.Duration, once, hideWhenInactive bool) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	var lastKey string
@@ -112,7 +117,7 @@ func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, inter
 			}
 			lastKey = key
 		}
-		output := engine.Output(track, state.ReadMode())
+		output := engine.Output(track, state.ReadMode(), outputPart)
 		if hideWhenInactive && track.ID == 0 {
 			output.Text = ""
 			output.Tooltip = ""

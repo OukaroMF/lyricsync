@@ -24,6 +24,26 @@ type Output struct {
 	Percentage int    `json:"percentage,omitempty"`
 }
 
+type OutputPart string
+
+const (
+	OutputCombined     OutputPart = "combined"
+	OutputOriginal     OutputPart = "original"
+	OutputTranslation  OutputPart = "translation"
+	OutputRomanization OutputPart = "romanization"
+	OutputSecondary    OutputPart = "secondary"
+)
+
+func ParseOutputPart(value string) (OutputPart, error) {
+	part := OutputPart(strings.ToLower(strings.TrimSpace(value)))
+	switch part {
+	case OutputCombined, OutputOriginal, OutputTranslation, OutputRomanization, OutputSecondary:
+		return part, nil
+	default:
+		return "", fmt.Errorf("未知输出类型 %q；可用值：combined、original、translation、romanization、secondary", value)
+	}
+}
+
 type Engine struct {
 	mu      sync.RWMutex
 	fetcher Fetcher
@@ -50,7 +70,7 @@ func (e *Engine) Update(ctx context.Context, track mpris.Track) error {
 	return err
 }
 
-func (e *Engine) Output(track mpris.Track, mode state.Mode) Output {
+func (e *Engine) Output(track mpris.Track, mode state.Mode, part OutputPart) Output {
 	e.mu.RLock()
 	data, fetchErr, loadedID := e.data, e.err, e.id
 	e.mu.RUnlock()
@@ -62,7 +82,7 @@ func (e *Engine) Output(track mpris.Track, mode state.Mode) Output {
 	artist := strings.Join(track.Artists, ", ")
 	tooltip := html.EscapeString(strings.Trim(strings.Join([]string{title, artist, track.Album}, "\n"), "\n"))
 	if track.ID == 0 {
-		return Output{Text: "󰝚  未检测到 go-musicfox", Tooltip: "请确认播放器已启动且 MPRIS 已启用", Class: "stopped"}
+		return selectOutputPart(Output{Text: "󰝚  未检测到 go-musicfox", Tooltip: "请确认播放器已启动且 MPRIS 已启用", Class: "stopped"}, part)
 	}
 	if loadedID != track.ID || fetchErr != nil {
 		text := html.EscapeString(strings.TrimSpace(strings.Join([]string{title, artist}, " — ")))
@@ -72,31 +92,40 @@ func (e *Engine) Output(track mpris.Track, mode state.Mode) Output {
 		if fetchErr != nil {
 			tooltip += "\n" + html.EscapeString(fetchErr.Error())
 		}
-		return Output{Text: text, Tooltip: tooltip, Class: class}
+		return selectOutputPart(Output{Text: text, Tooltip: tooltip, Class: class}, part)
 	}
 	positionMS := track.Position.Milliseconds() + e.offset.Milliseconds()
 	line, ok := data.ActiveLine(positionMS)
 	if !ok {
-		return Output{Text: html.EscapeString(title), Tooltip: tooltip, Class: class}
+		return selectOutputPart(Output{Text: html.EscapeString(title), Tooltip: tooltip, Class: class}, part)
 	}
 	primary := renderLine(line, positionMS)
-	secondary := ""
+	translation := distinctSecondary(lyrics.Closest(data.Translated, line.StartMS), line.Text)
+	romanization := distinctSecondary(lyrics.Closest(data.Romanized, line.StartMS), line.Text)
+	secondary := translation
 	if mode == state.Romanization {
-		secondary = lyrics.Closest(data.Romanized, line.StartMS)
+		secondary = romanization
 		if secondary == "" {
-			secondary = lyrics.Closest(data.Translated, line.StartMS)
+			secondary = translation
 		}
-	} else {
-		secondary = lyrics.Closest(data.Translated, line.StartMS)
-		if secondary == "" {
-			secondary = lyrics.Closest(data.Romanized, line.StartMS)
+	} else if secondary == "" {
+		secondary = romanization
+	}
+	text := primary
+	switch part {
+	case OutputOriginal:
+		text = primary
+	case OutputTranslation:
+		text = html.EscapeString(translation)
+	case OutputRomanization:
+		text = html.EscapeString(romanization)
+	case OutputSecondary:
+		text = html.EscapeString(secondary)
+	default:
+		if secondary != "" {
+			text = "<span size=\"small\" alpha=\"75%\">" + html.EscapeString(secondary) + "</span>\n" + primary
 		}
 	}
-	text := ""
-	if secondary != "" && strings.TrimSpace(secondary) != strings.TrimSpace(line.Text) {
-		text = "<span size=\"small\" alpha=\"75%\">" + html.EscapeString(secondary) + "</span>\n"
-	}
-	text += primary
 	percentage := 0
 	if track.Length > 0 {
 		percentage = int(float64(track.Position) / float64(track.Length) * 100)
@@ -110,6 +139,20 @@ func (e *Engine) Output(track mpris.Track, mode state.Mode) Output {
 	}
 	tooltip = fmt.Sprintf("%s\n显示：%s · 左键切换", tooltip, modeLabel)
 	return Output{Text: text, Tooltip: tooltip, Class: class, Percentage: percentage}
+}
+
+func selectOutputPart(output Output, part OutputPart) Output {
+	if part == OutputTranslation || part == OutputRomanization || part == OutputSecondary {
+		output.Text = ""
+	}
+	return output
+}
+
+func distinctSecondary(text, original string) string {
+	if strings.TrimSpace(text) == strings.TrimSpace(original) {
+		return ""
+	}
+	return text
 }
 
 func renderLine(line lyrics.Line, positionMS int64) string {

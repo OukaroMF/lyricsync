@@ -1,12 +1,30 @@
-#custom-lyrics {
+#lyrics {
   min-width: 360px;
   padding: 0 12px;
 }
 
-#custom-lyrics.paused {
+#custom-lyrics-secondary,
+#custom-lyrics-original {
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+}
+
+#custom-lyrics-secondary {
+  font-size: 9px;
+  opacity: 0.75;
+}
+
+#custom-lyrics-original {
+  font-size: 10px;
+}
+
+#custom-lyrics-secondary.paused,
+#custom-lyrics-original.paused {
   opacity: 0.65;
 }
 
-#custom-lyrics.stopped {
+#custom-lyrics-secondary.stopped,
+#custom-lyrics-original.stopped {
   opacity: 0.45;
 }
