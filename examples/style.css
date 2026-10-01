@@ -1,0 +1,12 @@
+#custom-lyrics {
+  min-width: 360px;
+  padding: 0 12px;
+}
+
+#custom-lyrics.paused {
+  opacity: 0.65;
+}
+
+#custom-lyrics.stopped {
+  opacity: 0.45;
+}

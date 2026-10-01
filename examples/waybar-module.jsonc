@@ -1,0 +1,12 @@
+{
+  "custom/lyrics": {
+    "exec": "$HOME/.local/bin/lyricsync",
+    "return-type": "json",
+    "restart-interval": 2,
+    "exec-on-event": false,
+    "escape": false,
+    "on-click": "$HOME/.local/bin/lyricsync toggle",
+    "tooltip": true,
+    "max-length": 80
+  }
+}
