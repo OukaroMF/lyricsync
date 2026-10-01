@@ -28,7 +28,7 @@ func TestOutputUsesTwoLinesAndWordMarkup(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := engine.Output(track, state.Translation)
-	if !strings.Contains(out.Text, "he<b><u>llo") || !strings.Contains(out.Text, "\n") || !strings.Contains(out.Text, "你好") {
+	if !strings.HasPrefix(out.Text, "<span size=\"small\" alpha=\"75%\">你好</span>\n") || !strings.Contains(out.Text, "he<b><u>llo") {
 		t.Fatalf("unexpected output: %q", out.Text)
 	}
 }

@@ -6,7 +6,7 @@
 
 - MPRIS 自动读取歌曲 ID、播放状态和进度，无需读取 go-musicfox 内部文件；
 - 网易云 `YRC` 逐字时间轴，传统 `LRC` 自动回退；
-- 原文 + 翻译或原文 + 罗马音两行显示；
+- 翻译/罗马音 + 原文两行显示；
 - 左键在“翻译 / 罗马音”间即时切换；
 - 播放中的词加粗、下划线，未播放部分半透明；
 - 暂停后停止推进，切歌自动重新获取歌词。
@@ -113,6 +113,7 @@ lyricsync mode translation        固定为翻译
 lyricsync mode romanization       固定为罗马音
 lyricsync -id 524152942 -position 1m5s  调试指定歌曲和位置
 lyricsync -once                   只输出一条 JSON
+lyricsync -hide-when-inactive     未检测到 musicfox 时输出空文本，便于 Waybar 回退
 ```
 
 默认只选择名称以 `musicfox` 开头的 MPRIS 实例。`-player auto` 也能用于其他播放器，
@@ -124,7 +125,7 @@ lyricsync -once                   只输出一条 JSON
 程序逐行输出 Waybar 的 `return-type: json` 格式：
 
 ```json
-{"text":"已播放<b><u>当前词</u></b><span alpha=\"55%\">未播放</span>\n<span size=\"small\" alpha=\"75%\">翻译</span>","tooltip":"歌名\n歌手\n显示：翻译 · 左键切换","class":"playing","percentage":42}
+{"text":"<span size=\"small\" alpha=\"75%\">翻译</span>\n已播放<b><u>当前词</u></b><span alpha=\"55%\">未播放</span>","tooltip":"歌名\n歌手\n显示：翻译 · 左键切换","class":"playing","percentage":42}
 ```
 
 如果某首歌没有当前模式对应的副歌词，会自动回退到另一种副歌词；两者都没有时只显示

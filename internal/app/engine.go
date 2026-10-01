@@ -92,10 +92,11 @@ func (e *Engine) Output(track mpris.Track, mode state.Mode) Output {
 			secondary = lyrics.Closest(data.Romanized, line.StartMS)
 		}
 	}
-	text := primary
+	text := ""
 	if secondary != "" && strings.TrimSpace(secondary) != strings.TrimSpace(line.Text) {
-		text += "\n<span size=\"small\" alpha=\"75%\">" + html.EscapeString(secondary) + "</span>"
+		text = "<span size=\"small\" alpha=\"75%\">" + html.EscapeString(secondary) + "</span>\n"
 	}
+	text += primary
 	percentage := 0
 	if track.Length > 0 {
 		percentage = int(float64(track.Position) / float64(track.Length) * 100)

@@ -59,6 +59,7 @@ func run(args []string) error {
 	poll := fs.Duration("poll", 500*time.Millisecond, "MPRIS 查询间隔")
 	offset := fs.Duration("offset", 0, "歌词时间偏移，例如 -200ms")
 	once := fs.Bool("once", false, "只输出一次 JSON")
+	hideWhenInactive := fs.Bool("hide-when-inactive", false, "未检测到目标播放器时输出空文本")
 	id := fs.Int64("id", 0, "直接指定网易云歌曲 ID（调试用）")
 	position := fs.Duration("position", 0, "配合 -id 指定播放位置（调试用）")
 	if err := fs.Parse(args); err != nil {
@@ -87,10 +88,10 @@ func run(args []string) error {
 	}
 	defer source.Close()
 
-	return stream(ctx, source, engine, *interval, *once)
+	return stream(ctx, source, engine, *interval, *once, *hideWhenInactive)
 }
 
-func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, interval time.Duration, once bool) error {
+func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, interval time.Duration, once, hideWhenInactive bool) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	var lastKey string
@@ -111,7 +112,12 @@ func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, inter
 			}
 			lastKey = key
 		}
-		if err := writeOutput(engine.Output(track, state.ReadMode())); err != nil {
+		output := engine.Output(track, state.ReadMode())
+		if hideWhenInactive && track.ID == 0 {
+			output.Text = ""
+			output.Tooltip = ""
+		}
+		if err := writeOutput(output); err != nil {
 			if errors.Is(err, syscall.EPIPE) {
 				return nil
 			}
