@@ -6,16 +6,20 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/oukaromf/lyricsync/internal/app"
+	"github.com/oukaromf/lyricsync/internal/external"
 	"github.com/oukaromf/lyricsync/internal/lyrics"
 	"github.com/oukaromf/lyricsync/internal/mpris"
+	"github.com/oukaromf/lyricsync/internal/native"
 	"github.com/oukaromf/lyricsync/internal/state"
 )
 
@@ -31,7 +35,14 @@ func main() {
 
 func run(args []string) error {
 	if len(args) > 0 {
+		if strings.HasPrefix(args[0], "chrome-extension://") {
+			return runNative(args)
+		}
 		switch args[0] {
+		case "native-host":
+			return runNative(args[1:])
+		case "install-native-host":
+			return native.Install(args[1:], os.Stdout)
 		case "toggle":
 			mode, err := state.Toggle()
 			if err == nil {
@@ -60,6 +71,7 @@ func run(args []string) error {
 	offset := fs.Duration("offset", 0, "歌词时间偏移，例如 -200ms")
 	once := fs.Bool("once", false, "只输出一次 JSON")
 	hideWhenInactive := fs.Bool("hide-when-inactive", false, "未检测到目标播放器时输出空文本")
+	externalSubtitles := fs.Bool("external-subtitles", false, "优先显示 CCTracker 网页字幕，失效时回退到 MPRIS 歌词")
 	outputName := fs.String("output", "combined", "输出内容：combined、original、translation、romanization、secondary")
 	id := fs.Int64("id", 0, "直接指定网易云歌曲 ID（调试用）")
 	position := fs.Duration("position", 0, "配合 -id 指定播放位置（调试用）")
@@ -89,27 +101,84 @@ func run(args []string) error {
 
 	source, err := mpris.New(*player, *poll)
 	if err != nil {
-		return fmt.Errorf("连接 MPRIS: %w", err)
+		if !*externalSubtitles {
+			return fmt.Errorf("连接 MPRIS: %w", err)
+		}
+		log.Printf("lyricsync: 连接 MPRIS: %v；继续接收外部字幕", err)
+	} else {
+		defer source.Close()
 	}
-	defer source.Close()
-
-	return stream(ctx, source, engine, outputPart, *interval, *once, *hideWhenInactive)
+	var captions *external.Reader
+	if *externalSubtitles {
+		captions = external.NewReader()
+	}
+	var playback trackSource
+	if source != nil {
+		playback = source
+	}
+	return stream(ctx, playback, engine, outputPart, *interval, *once, *hideWhenInactive, captions, os.Stdout)
 }
 
-func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, outputPart app.OutputPart, interval time.Duration, once, hideWhenInactive bool) error {
+type trackSource interface {
+	Track(context.Context) (mpris.Track, error)
+}
+
+func stream(ctx context.Context, source trackSource, engine *app.Engine, outputPart app.OutputPart, interval time.Duration, once, hideWhenInactive bool, captions *external.Reader, writer io.Writer) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	var lastKey string
 	var nextFetch time.Time
+	// External subtitles must remain responsive while NetEase is slow/offline.
+	results := make(chan error, 1)
+	fetching := false
 	for {
-		track, err := source.Track(ctx)
+		if fetching {
+			select {
+			case err := <-results:
+				fetching = false
+				if err != nil {
+					log.Printf("lyricsync: 获取歌词失败: %v", err)
+					nextFetch = time.Now().Add(30 * time.Second)
+				} else {
+					nextFetch = time.Time{}
+				}
+			default:
+			}
+		}
+		if captions != nil {
+			if snapshot, ok := captions.Current(time.Now()); ok {
+				if err := writeOutputTo(writer, app.ExternalOutput(snapshot, outputPart)); err != nil {
+					if errors.Is(err, syscall.EPIPE) {
+						return nil
+					}
+					return err
+				}
+				if once {
+					return nil
+				}
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-ticker.C:
+				}
+				continue
+			}
+		}
+		var track mpris.Track
+		var err error
+		if source != nil {
+			track, err = source.Track(ctx)
+		}
 		if err != nil && !errors.Is(err, mpris.ErrNoPlayer) {
 			log.Printf("lyricsync: MPRIS: %v", err)
 		}
 		key := fmt.Sprintf("%s:%d", track.Player, track.ID)
 		shouldRetry := !nextFetch.IsZero() && time.Now().After(nextFetch)
-		if track.ID > 0 && (key != lastKey || shouldRetry) {
-			if err := engine.Update(ctx, track); err != nil {
+		if track.ID > 0 && !fetching && (key != lastKey || shouldRetry) {
+			if captions != nil && !once {
+				fetching = true
+				go func(track mpris.Track) { results <- engine.Update(ctx, track) }(track)
+			} else if err := engine.Update(ctx, track); err != nil {
 				log.Printf("lyricsync: 获取歌曲 %d 歌词失败: %v", track.ID, err)
 				nextFetch = time.Now().Add(30 * time.Second)
 			} else {
@@ -122,7 +191,7 @@ func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, outpu
 			output.Text = ""
 			output.Tooltip = ""
 		}
-		if err := writeOutput(output); err != nil {
+		if err := writeOutputTo(writer, output); err != nil {
 			if errors.Is(err, syscall.EPIPE) {
 				return nil
 			}
@@ -140,7 +209,17 @@ func stream(ctx context.Context, source *mpris.Source, engine *app.Engine, outpu
 }
 
 func writeOutput(output app.Output) error {
-	enc := json.NewEncoder(os.Stdout)
+	return writeOutputTo(os.Stdout, output)
+}
+
+func writeOutputTo(writer io.Writer, output app.Output) error {
+	enc := json.NewEncoder(writer)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(output)
+}
+
+func runNative(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return native.Serve(ctx, args, os.Stdin, os.Stdout)
 }

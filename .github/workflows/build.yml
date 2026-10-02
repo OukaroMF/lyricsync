@@ -1,0 +1,64 @@
+name: Test and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: '0'
+  BUILD_VERSION: ${{ github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test and vet
+        run: |
+          go test -buildvcs=false ./...
+          go vet ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build and package Linux binary
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p build dist
+          GOOS=linux GOARCH="$TARGET_ARCH" go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$BUILD_VERSION" -o build/lyricsync ./cmd/lyricsync
+          tar -czf "dist/lyricsync-linux-${TARGET_ARCH}.tar.gz" -C build lyricsync -C .. LICENSE README.md
+          cd dist
+          sha256sum "lyricsync-linux-${TARGET_ARCH}.tar.gz" > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lyricsync-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
