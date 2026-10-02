@@ -169,4 +169,8 @@ lyricsync -hide-when-inactive     未检测到 musicfox 时输出空文本，便
 ## 致谢与许可
 
 歌词字段选择与 YRC 格式兼容逻辑参考了
-[go-musicfox](https://github.com/go-musicfox/go-musicfox)。本项目采用 GPL-3.0-or-later。
+[go-musicfox](https://github.com/go-musicfox/go-musicfox)。
+
+lyricsync 版权所有 (C) 2026 OukaroMF，采用
+[GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html) 发布，
+许可证全文见 [LICENSE](LICENSE)。
