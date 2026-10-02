@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,11 +27,13 @@ func TestReaderLifecycle(t *testing.T) {
 		}
 	}
 	s := sample(now)
+	s.Translation = "翻译\n第二行"
 	write(s)
-	if got, ok := r.Current(now.Add(time.Second)); !ok || got.Text != "你好" {
+	if got, ok := r.Current(now.Add(time.Second)); !ok || got.Text != "你好" || got.Translation != s.Translation {
 		t.Fatal("paused caption not loaded")
 	}
 	s.Text = ""
+	s.Translation = ""
 	write(s)
 	if got, ok := r.Current(now.Add(2 * time.Second)); !ok || got.Text != "" {
 		t.Fatal("cue gap released ownership")
@@ -52,6 +55,15 @@ func TestReaderLifecycle(t *testing.T) {
 	os.Remove(path)
 	if _, ok := r.Current(now.Add(5 * time.Second)); ok {
 		t.Fatal("deleted snapshot active")
+	}
+}
+
+func TestOversizedTranslation(t *testing.T) {
+	now := time.Now()
+	s := sample(now)
+	s.Translation = strings.Repeat("x", 65537)
+	if s.Valid(now) {
+		t.Fatal("oversized translation accepted")
 	}
 }
 

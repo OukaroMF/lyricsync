@@ -7,9 +7,20 @@ import (
 )
 
 func ExternalOutput(snapshot external.Snapshot, part OutputPart) Output {
-	text := ""
-	if part == OutputOriginal || part == OutputCombined {
-		text = html.EscapeString(snapshot.Text)
+	primary := html.EscapeString(snapshot.Text)
+	translation := distinctSecondary(snapshot.Translation, snapshot.Text)
+	text := primary
+	switch part {
+	case OutputTranslation, OutputSecondary:
+		text = html.EscapeString(translation)
+	case OutputRomanization:
+		text = ""
+	case OutputOriginal:
+		text = primary
+	default:
+		if translation != "" {
+			text = "<span size=\"small\" alpha=\"75%\">" + html.EscapeString(translation) + "</span>\n" + primary
+		}
 	}
 	percentage := 0
 	if snapshot.Duration > 0 {

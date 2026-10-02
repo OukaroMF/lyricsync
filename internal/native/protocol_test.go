@@ -13,7 +13,7 @@ import (
 )
 
 func sample() Message {
-	return Message{Version: 1, Type: "snapshot", SessionID: "session", Sequence: 1, Site: "youtube", MediaID: "abc", Title: "标题", URL: "https://www.youtube.com/watch?v=abc", CaptionsEnabled: true, Text: "你好\n<&字幕>", Status: "paused", Position: 1, Duration: 10}
+	return Message{Version: 1, Type: "snapshot", SessionID: "session", Sequence: 1, Site: "youtube", MediaID: "abc", Title: "标题", URL: "https://www.youtube.com/watch?v=abc", CaptionsEnabled: true, Text: "你好\n<&字幕>", Translation: "hello &\nsecond line", Status: "paused", Position: 1, Duration: 10}
 }
 
 func TestFrames(t *testing.T) {
@@ -26,7 +26,7 @@ func TestFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got Message
-	if err := json.Unmarshal(data, &got); err != nil || got.Text != sample().Text {
+	if err := json.Unmarshal(data, &got); err != nil || got.Text != sample().Text || got.Translation != sample().Translation {
 		t.Fatalf("UTF-8 round trip: %v, %q", err, got.Text)
 	}
 	for _, input := range [][]byte{{1}, {1, 0, 0, 0}, {0, 0, 0, 0}} {
@@ -57,6 +57,14 @@ func TestValidation(t *testing.T) {
 	}
 	if !ValidOrigin("chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/") || ValidOrigin("https://evil.test") {
 		t.Fatal("origin validation")
+	}
+}
+
+func TestOversizedTranslation(t *testing.T) {
+	m := sample()
+	m.Translation = string(bytes.Repeat([]byte("x"), 65537))
+	if m.Validate() == nil {
+		t.Fatal("accepted oversized translation")
 	}
 }
 
@@ -117,7 +125,7 @@ func TestRunHeartbeatSequenceAndEOF(t *testing.T) {
 	data, _ = os.ReadFile(path)
 	var after State
 	json.Unmarshal(data, &after)
-	if after.UpdatedAt <= before.UpdatedAt || after.Text != sample().Text {
+	if after.UpdatedAt <= before.UpdatedAt || after.Text != sample().Text || after.Translation != sample().Translation {
 		t.Fatal("paused state did not stay alive")
 	}
 	WriteFrame(send, sample())

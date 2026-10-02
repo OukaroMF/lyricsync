@@ -7,7 +7,7 @@
     let
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      version = "0.1.2";
+      version = "0.1.3";
 
       mkLyricsync = pkgs:
         pkgs.buildGoModule {

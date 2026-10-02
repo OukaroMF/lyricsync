@@ -30,6 +30,7 @@ type Message struct {
 	URL             string  `json:"url,omitempty"`
 	CaptionsEnabled bool    `json:"captionsEnabled,omitempty"`
 	Text            string  `json:"text"`
+	Translation     string  `json:"translation,omitempty"`
 	Status          string  `json:"status,omitempty"`
 	Position        float64 `json:"position,omitempty"`
 	Duration        float64 `json:"duration,omitempty"`
@@ -56,7 +57,7 @@ func (m Message) Validate() error {
 	}
 	validSite := m.Site == "youtube" && u.Host == "www.youtube.com" && u.Path == "/watch" && u.Query().Get("v") != "" ||
 		m.Site == "bilibili" && u.Host == "www.bilibili.com" && biliPath.MatchString(u.Path)
-	if !validSite || !m.CaptionsEnabled || (m.Status != "playing" && m.Status != "paused") || m.MediaID == "" || len(m.MediaID) > 2048 || len(m.Title) > 16384 || len(m.Text) > 65536 {
+	if !validSite || !m.CaptionsEnabled || (m.Status != "playing" && m.Status != "paused") || m.MediaID == "" || len(m.MediaID) > 2048 || len(m.Title) > 16384 || len(m.Text) > 65536 || len(m.Translation) > 65536 {
 		return errors.New("invalid subtitle snapshot")
 	}
 	if math.IsNaN(m.Position) || math.IsInf(m.Position, 0) || m.Position < 0 || math.IsNaN(m.Duration) || math.IsInf(m.Duration, 0) || m.Duration <= 0 {

@@ -24,6 +24,7 @@ type Snapshot struct {
 	URL             string  `json:"url"`
 	CaptionsEnabled bool    `json:"captionsEnabled"`
 	Text            string  `json:"text"`
+	Translation     string  `json:"translation,omitempty"`
 	Status          string  `json:"status"`
 	Position        float64 `json:"position"`
 	Duration        float64 `json:"duration"`
@@ -43,7 +44,7 @@ func (s Snapshot) Valid(now time.Time) bool {
 	age := now.Sub(time.UnixMilli(s.UpdatedAt))
 	return s.Version == 1 && s.Type == "snapshot" && s.CaptionsEnabled && s.SessionID != "" && s.HostID != "" && s.MediaID != "" && s.Sequence > 0 &&
 		(s.Site == "youtube" || s.Site == "bilibili") && (s.Status == "playing" || s.Status == "paused") &&
-		s.UpdatedAt > 0 && age >= -time.Second && age < TTL && len(s.Text) <= 65536 &&
+		s.UpdatedAt > 0 && age >= -time.Second && age < TTL && len(s.Text) <= 65536 && len(s.Translation) <= 65536 &&
 		!math.IsNaN(s.Position) && !math.IsInf(s.Position, 0) && s.Position >= 0 &&
 		!math.IsNaN(s.Duration) && !math.IsInf(s.Duration, 0) && s.Duration > 0
 }

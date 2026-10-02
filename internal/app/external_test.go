@@ -26,3 +26,26 @@ func TestExternalOutput(t *testing.T) {
 		t.Fatal("cue gap shows title")
 	}
 }
+
+func TestExternalBilingualLayout(t *testing.T) {
+	s := external.Snapshot{Text: "original <&>\nsecond line", Translation: "翻译 &\n第二行"}
+	for part, want := range map[OutputPart]string{
+		OutputOriginal:     "original &lt;&amp;&gt;\nsecond line",
+		OutputTranslation:  "翻译 &amp;\n第二行",
+		OutputSecondary:    "翻译 &amp;\n第二行",
+		OutputRomanization: "",
+		OutputCombined:     "<span size=\"small\" alpha=\"75%\">翻译 &amp;\n第二行</span>\noriginal &lt;&amp;&gt;\nsecond line",
+	} {
+		if got := ExternalOutput(s, part).Text; got != want {
+			t.Fatalf("%s: got %q, want %q", part, got, want)
+		}
+	}
+	s.Translation = s.Text
+	if ExternalOutput(s, OutputSecondary).Text != "" || ExternalOutput(s, OutputCombined).Text != ExternalOutput(s, OutputOriginal).Text {
+		t.Fatal("duplicate translation should be suppressed like music lyrics")
+	}
+	s.Text, s.Translation = "", ""
+	if ExternalOutput(s, OutputCombined).Text != "" {
+		t.Fatal("cue gap must clear both rows")
+	}
+}

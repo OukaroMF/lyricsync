@@ -126,7 +126,7 @@ lyricsync install-native-host --browser brave --extension-id amibfjbcnoiilieibpn
 
 浏览器启动 LyricSync 时传入扩展来源，LyricSync 自动进入接收模式，从标准输入读取分帧 JSON；也可用 `lyricsync native-host chrome-extension://扩展ID/` 显式进入该模式。接收模式不连接 MPRIS，不输出 Waybar JSON。字幕参数由 CCTracker 持续发送，包括文本、暂停状态、播放位置和视频信息。
 
-Waybar 进程使用 `lyricsync -external-subtitles -output original` 或 `-output combined` 显示网页字幕；`secondary`、翻译和罗马音为空。多行保留，Pango 特殊字符转义；暂停保持字幕，句间空白保持接管。关闭字幕、结束、断连或十秒心跳过期后回退 musicfox；musicfox 未启动也可显示网页字幕。
+Waybar 进程使用 `lyricsync -external-subtitles -output original` 显示网页原文，`secondary` / `translation` 显示网页已有的副字幕；`combined` 沿用歌词布局，将小字号译文放在原文上方，罗马音为空。原文与译文分别传递，不把原文内的换行当成译文；与歌词一样隐藏重复译文。各轨多行保留，Pango 特殊字符转义；暂停保持字幕，句间空白保持接管。关闭字幕、结束、断连或十秒心跳过期后回退 musicfox；musicfox 未启动也可显示网页字幕。旧版只有 `text` 的消息仍可接收。
 
 接收进程将当前状态原子写入 `$XDG_RUNTIME_DIR/cctracker/subtitle.json`，供多个 Waybar 输出进程读取，目录权限 `0700`、文件权限 `0600`。每两秒刷新心跳，正常断连清除；默认一个浏览器配置文件发送。网页负责字幕时间，LyricSync 不生成翻译或逐字高亮。
 
